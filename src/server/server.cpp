@@ -153,7 +153,6 @@ void ServicePort::openAcceptor(const std::weak_ptr<ServicePort> &weak_service, u
 	}
 }
 
-// --------- POPRAWIONA FUNKCJA OPEN: IPv4, IPv6, domeny ---------
 void ServicePort::open(uint16_t port) {
 	close();
 
@@ -166,20 +165,16 @@ void ServicePort::open(uint16_t port) {
 		bool resolved = false;
 
 		try {
-			// Najpierw próbujemy jako IPv4
 			ipAddress = asio::ip::address_v4::from_string(ipString);
 			resolved = true;
 		} catch (const std::exception&) {
 			try {
-				// Następnie próbujemy jako IPv6
 				ipAddress = asio::ip::address_v6::from_string(ipString);
 				resolved = true;
 			} catch (const std::exception&) {
-				// Jeśli to nie jest adres IP, rozwiąż jako domenę
 				asio::ip::tcp::resolver resolver(io_service);
 				asio::ip::tcp::resolver::results_type results = resolver.resolve(ipString, std::to_string(port));
 
-				// Najpierw znajdź IPv6 (jeśli jest), potem IPv4
 				for (const auto& entry : results) {
 					if (entry.endpoint().address().is_v6()) {
 						ipAddress = entry.endpoint().address().to_v6();
@@ -207,7 +202,6 @@ void ServicePort::open(uint16_t port) {
 		if (g_configManager().getBoolean(BIND_ONLY_GLOBAL_ADDRESS)) {
 			endpoint = asio::ip::tcp::endpoint(ipAddress, serverPort);
 		} else {
-			// Typy endpointa muszą być rozdzielone (nie wolno używać ?: bo różne typy!)
 			if (ipAddress.is_v6()) {
 				endpoint = asio::ip::tcp::endpoint(asio::ip::address_v6::any(), serverPort);
 			} else {
@@ -232,7 +226,6 @@ void ServicePort::open(uint16_t port) {
 		);
 	}
 }
-// -------------------------------------------------------------
 
 void ServicePort::close() const {
 	if (acceptor && acceptor->is_open()) {
