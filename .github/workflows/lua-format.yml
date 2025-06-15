@@ -8,6 +8,11 @@ on:
   push:
     paths:
       - "data*/**"
+
+# Add this permissions block here
+permissions:
+  contents: write # This grants write access to the repository content
+
 jobs:
   lua-formatter:
     runs-on: ubuntu-latest
