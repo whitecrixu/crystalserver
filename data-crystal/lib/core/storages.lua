@@ -135,6 +135,15 @@ Storage = {
 				ScrapperDoor = 41172,
 				WarlordDoor = 41173,
 			},
+			TheInquisitionQuest = {
+                Reward = 41707,
+				RewardRoomText = 41708,
+                Questline = 41691,
+				Mission07 = 41698,
+				RewardDoor = 41699,
+                EnterTeleport = 41706,
+
+        },
 		},
 	},
 
