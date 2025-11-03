@@ -4,7 +4,7 @@ zone:addArea(Position(33450, 32131, 9), Position(33460, 32140, 9))
 local raid = Raid("candia.sugarmommy", {
 	zone = zone,
 	allowedDays = { "Friday", "Saturday", "Sunday" },
-	timeWindow = "2h",  -- Boss raid must occur within 2 hour window
+	timeWindow = "2h", -- Boss raid must occur within 2 hour window
 	minActivePlayers = 1,
 	initialChance = 0.10,
 	targetChancePerDay = 0.05,

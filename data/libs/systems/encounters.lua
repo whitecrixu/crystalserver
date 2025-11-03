@@ -112,7 +112,7 @@ function Encounter:resetConfig(config)
 	else
 		self.zone = nil
 	end
-	
+
 	if config.spawnZone and type(config.spawnZone.getName) == "function" then
 		self.spawnZone = config.spawnZone:getName()
 	elseif config.zone and type(config.zone.getName) == "function" then
@@ -120,7 +120,7 @@ function Encounter:resetConfig(config)
 	else
 		self.spawnZone = nil
 	end
-	
+
 	self.stages = {}
 	self.currentStage = Encounter.unstarted
 	self.registered = false

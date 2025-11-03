@@ -5,7 +5,7 @@ zone:addArea(Position(32431, 32240, 7), Position(32464, 32280, 7))
 local raid = Raid("thais.wild-horses", {
 	zone = zone,
 	allowedDays = { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" },
-	timeWindow = "1h",  -- Monster raid must occur within 1 hour window
+	timeWindow = "1h", -- Monster raid must occur within 1 hour window
 	minActivePlayers = 3,
 	initialChance = 30,
 	targetChancePerDay = 50,

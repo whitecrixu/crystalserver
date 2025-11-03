@@ -26,21 +26,21 @@ setmetatable(Raid, {
 	---@param config { name: string, global: boolean, scheduleType: ScheduleType, allowedDays: Weekday|Weekday[], allowedDayOfMonth: number|number[], timeWindow: string, minActivePlayers: number, targetChancePerDay: number, maxChancePerDay: number, minGapBetween: string|number, initialChance: number, maxChecksPerDay: number }
 	__call = function(self, name, config)
 		config.global = true
-		
+
 		local success, encounter = pcall(function()
 			return Encounter(name, config)
 		end)
-		
+
 		if not success then
 			logger.error("[Raid] Failed to create encounter for raid '{}': {}", name, encounter)
 			return nil
 		end
-		
+
 		if not encounter then
 			logger.error("[Raid] Encounter constructor returned nil for raid: {}", name)
 			return nil
 		end
-		
+
 		local raid = setmetatable(encounter, { __index = Raid })
 		raid.scheduleType = config.scheduleType
 		raid.allowedDays = config.allowedDays
@@ -155,7 +155,7 @@ function Raid:canStart()
 			return false
 		end
 	end
-	
+
 	-- hour based checks: allowedHours can be a number (0-23), a table of numbers, or a string range "HH-HH"
 	if self.allowedHours and not self:isAllowedHour() then
 		logger.debug("Raid {} is not allowed at this hour ({})", self.name, os.date("%H"))
@@ -217,7 +217,7 @@ function Raid:isAllowedDayOfMonth()
 	if not dayOfMonth then
 		return true
 	end
-	
+
 	local dom = self.allowedDayOfMonth
 	if type(dom) == "number" then
 		return dom == dayOfMonth
