@@ -1,0 +1,14 @@
+local raid = Raid("WaspBear", {
+    allowedDays = { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" },
+    -- auto-converted from XML; please review and flesh out manually
+    targetChancePerDay = 0.05,
+    maxChancePerCheck = 1.0,
+
+    -- Raid type: MONSTER
+    allowedDayOfMonth = 25,  -- Assigned to day 25 of month
+    timeWindow = "1h",  -- Raid must occur within this window
+})
+
+-- TODO: convert events from XML (abdendriel/wasp_bear.xml) into Lua stages here
+
+raid:register()

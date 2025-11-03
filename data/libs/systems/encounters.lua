@@ -51,7 +51,7 @@ function EncounterStage:autoAdvance(config)
 	if config.monstersKilled then
 		local originalTick = self.tick
 		function self.tick()
-			if originaTick then
+			if originalTick then
 				originalTick()
 			end
 			if delayElapsed and self.encounter:countMonsters() == 0 then
@@ -59,6 +59,8 @@ function EncounterStage:autoAdvance(config)
 			end
 		end
 	end
+
+	return self
 end
 
 ---@class Encounter
@@ -105,8 +107,20 @@ setmetatable(Encounter, {
 ---Resets the encounter configuration
 ---@param config EncounterConfig The new configuration
 function Encounter:resetConfig(config)
-	self.zone = config.zone:getName()
-	self.spawnZone = config.spawnZone and config.spawnZone:getName() or config.zone:getName()
+	if config.zone and type(config.zone.getName) == "function" then
+		self.zone = config.zone:getName()
+	else
+		self.zone = nil
+	end
+	
+	if config.spawnZone and type(config.spawnZone.getName) == "function" then
+		self.spawnZone = config.spawnZone:getName()
+	elseif config.zone and type(config.zone.getName) == "function" then
+		self.spawnZone = config.zone:getName()
+	else
+		self.spawnZone = nil
+	end
+	
 	self.stages = {}
 	self.currentStage = Encounter.unstarted
 	self.registered = false
