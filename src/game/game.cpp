@@ -1032,7 +1032,12 @@ std::shared_ptr<Player> Game::getMarketPlayerByGUID(uint32_t &guid) {
 		}
 	}
 
-	return getPlayerByGUID(guid, true);
+	std::shared_ptr<Player> tmpPlayer = std::make_shared<Player>(nullptr);
+	if (!IOLoginData::loadPlayerById(tmpPlayer, guid, false)) {
+		return nullptr;
+	}
+	tmpPlayer->setOnline(false);
+	return tmpPlayer;
 }
 
 std::shared_ptr<Creature> Game::getCreatureByName(const std::string &s) {
@@ -4700,17 +4705,15 @@ void Game::unwrapItem(const std::shared_ptr<Item> &item, uint16_t unWrapId, cons
 		return;
 	}
 
-	auto hiddenCharges = item->getAttribute<uint16_t>(ItemAttribute_t::DATE);
 	const ItemType &newiType = Item::items.getItemType(unWrapId);
 	if (player != nullptr && house != nullptr && newiType.isBed() && house->getMaxBeds() > -1 && house->getBedCount() >= house->getMaxBeds()) {
 		player->sendCancelMessage("You reached the maximum beds in this house");
 		return;
 	}
 
-	auto amount = item->getAttribute<uint16_t>(ItemAttribute_t::AMOUNT);
-	if (!amount) {
-		amount = 1;
-	}
+	const uint16_t ownerAttr = item->getAttribute<uint16_t>(ItemAttribute_t::OWNER);
+	const uint16_t amountAttr = item->getAttribute<uint16_t>(ItemAttribute_t::AMOUNT);
+	const uint16_t amount = amountAttr ? amountAttr : 1;
 
 	std::shared_ptr<Item> newItem = transformItem(item, unWrapId, amount);
 	if (house && newiType.isBed()) {
@@ -4718,14 +4721,17 @@ void Game::unwrapItem(const std::shared_ptr<Item> &item, uint16_t unWrapId, cons
 	}
 
 	if (newItem) {
-		if (hiddenCharges > 0 && isCaskItem(unWrapId)) {
-			newItem->setSubType(hiddenCharges);
+		if (isCaskItem(unWrapId)) {
+			const uint16_t hiddenCharges = item->getAttribute<uint16_t>(ItemAttribute_t::DATE);
+			if (hiddenCharges > 0) {
+				newItem->setSubType(hiddenCharges);
+			}
 		}
 
 		newItem->removeCustomAttribute("unWrapId");
 		newItem->removeAttribute(ItemAttribute_t::DESCRIPTION);
 		newItem->startDecaying();
-		newItem->setAttribute(ItemAttribute_t::OWNER, item->getAttribute<uint16_t>(ItemAttribute_t::OWNER));
+		newItem->setAttribute(ItemAttribute_t::OWNER, ownerAttr);
 	}
 }
 
