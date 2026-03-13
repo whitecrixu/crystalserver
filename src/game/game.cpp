@@ -40,6 +40,7 @@
 #include "enums/player_wheel.hpp"
 #include "database/databasetasks.hpp"
 #include "game/scheduling/dispatcher.hpp"
+#include "game/scheduling/events_scheduler.hpp"
 #include "game/scheduling/save_manager.hpp"
 #include "game/zones/zone.hpp"
 #include "io/io_bosstiary.hpp"
@@ -2814,7 +2815,20 @@ void Game::addMoney(const std::shared_ptr<Cylinder> &cylinder, uint64_t money, u
 			const uint16_t createCount = std::min<uint32_t>(100, count);
 			const std::shared_ptr<Item> &remaindItem = Item::CreateItem(itemId, createCount);
 
-			ReturnValue ret = internalAddItem(cylinder, remaindItem, INDEX_WHEREEVER, flags);
+			ReturnValue ret = RETURNVALUE_NOTPOSSIBLE;
+			bool triedManaged = false;
+
+			if (const auto &player = std::dynamic_pointer_cast<Player>(cylinder)) {
+				if (!g_configManager().getBoolean(AUTOBANK)) {
+					ret = internalCollectManagedItems(player, remaindItem, getObjectCategory(remaindItem), true);
+					triedManaged = true;
+				}
+			}
+
+			if (!triedManaged || ret != RETURNVALUE_NOERROR) {
+				ret = internalAddItem(cylinder, remaindItem, INDEX_WHEREEVER, flags);
+			}
+
 			if (ret != RETURNVALUE_NOERROR) {
 				internalAddItem(cylinder->getTile(), remaindItem, INDEX_WHEREEVER, FLAG_NOLIMIT);
 			}
@@ -4719,6 +4733,9 @@ std::shared_ptr<Item> Game::wrapItem(const std::shared_ptr<Item> &item, const st
 	}
 
 	newItem->setAttribute(ItemAttribute_t::OWNER, item->getAttribute<uint16_t>(ItemAttribute_t::OWNER));
+	if (const int64_t storeAttribute = item->getAttribute<int64_t>(ItemAttribute_t::STORE); storeAttribute > 0) {
+		newItem->setAttribute(ItemAttribute_t::STORE, storeAttribute);
+	}
 	newItem->startDecaying();
 	return newItem;
 }
@@ -4736,6 +4753,7 @@ void Game::unwrapItem(const std::shared_ptr<Item> &item, uint16_t unWrapId, cons
 	}
 
 	const uint16_t ownerAttr = item->getAttribute<uint16_t>(ItemAttribute_t::OWNER);
+	const int64_t storeAttr = item->getAttribute<int64_t>(ItemAttribute_t::STORE);
 	const uint16_t amountAttr = item->getAttribute<uint16_t>(ItemAttribute_t::AMOUNT);
 	const uint16_t amount = amountAttr ? amountAttr : 1;
 
@@ -4756,6 +4774,9 @@ void Game::unwrapItem(const std::shared_ptr<Item> &item, uint16_t unWrapId, cons
 		newItem->removeAttribute(ItemAttribute_t::DESCRIPTION);
 		newItem->startDecaying();
 		newItem->setAttribute(ItemAttribute_t::OWNER, ownerAttr);
+		if (storeAttr > 0) {
+			newItem->setAttribute(ItemAttribute_t::STORE, storeAttr);
+		}
 	}
 }
 
@@ -10781,8 +10802,12 @@ uint32_t Game::makeFiendishMonster(uint32_t forgeableMonsterId /* = 0*/, bool cr
 		// If the forgeable monsters haven't been created
 		// Then we'll create them so they don't return in the next if (forgeableMonsters.empty())
 		for (const auto &[monsterId, monster] : monsters) {
-			auto monsterTile = monster->getTile();
-			if (!monster || !monsterTile) {
+			if (!monster) {
+				continue;
+			}
+
+			const auto monsterTile = monster->getTile();
+			if (!monsterTile) {
 				continue;
 			}
 
@@ -10903,6 +10928,17 @@ void Game::updateFiendishMonsterStatus(uint32_t monsterId, const std::string &mo
 	makeFiendishMonster();
 }
 
+void Game::updateInfluencedMonsterStatus(uint32_t monsterId, const std::string &monsterName) {
+	const auto &monster = getMonsterByID(monsterId);
+	if (!monster) {
+		g_logger().warn("[{}] Failed to update monster with id {} and name {}, monster not found", __FUNCTION__, monsterId, monsterName);
+	} else {
+		monster->clearInfluencedStatus();
+	}
+
+	removeInfluencedMonster(monsterId, false);
+}
+
 bool Game::removeForgeMonster(uint32_t id, ForgeClassifications_t monsterForgeClassification, bool create) {
 	if (monsterForgeClassification == ForgeClassifications_t::FORGE_FIENDISH_MONSTER) {
 		removeFiendishMonster(id, create);
@@ -10950,11 +10986,11 @@ bool Game::removeFiendishMonster(uint32_t id, bool create /* = true*/) {
 }
 
 void Game::updateForgeableMonsters() {
-	if (auto influencedLimit = g_configManager().getNumber(FORGE_INFLUENCED_CREATURES_LIMIT);
+	if (auto influencedLimit = getInfluencedLimit();
 	    forgeableMonsters.size() < influencedLimit) {
 		forgeableMonsters.clear();
 		for (const auto &[monsterId, monster] : monsters) {
-			const auto &monsterTile = monster->getTile();
+			const auto monsterTile = monster->getTile();
 			if (!monsterTile) {
 				continue;
 			}
@@ -10971,10 +11007,29 @@ void Game::updateForgeableMonsters() {
 		}
 	}
 
-	uint32_t fiendishLimit = g_configManager().getNumber(FORGE_FIENDISH_CREATURES_LIMIT); // Fiendish Creatures limit
+	for (const auto &monsterId : getInfluencedMonsters()) {
+		if (!getMonsterByID(monsterId)) {
+			removeInfluencedMonster(monsterId);
+		}
+	}
+
+	uint32_t fiendishLimit = getFiendishLimit(); // Fiendish Creatures limit
 	if (fiendishMonsters.size() < fiendishLimit) {
 		createFiendishMonsters();
 	}
+
+	uint32_t influencedLimit = getInfluencedLimit();
+	if (influencedMonsters.size() < influencedLimit) {
+		createInfluencedMonsters(false);
+	}
+}
+
+uint32_t Game::getFiendishLimit() const {
+	return static_cast<uint32_t>(g_configManager().getNumber(FORGE_FIENDISH_CREATURES_LIMIT) * g_eventsScheduler().getFiendishSchedule() / 100);
+}
+
+uint32_t Game::getInfluencedLimit() const {
+	return static_cast<uint32_t>(g_configManager().getNumber(FORGE_INFLUENCED_CREATURES_LIMIT) * g_eventsScheduler().getInfluencedSchedule() / 100);
 }
 
 void Game::createFiendishMonsters() {
@@ -10995,21 +11050,19 @@ void Game::createFiendishMonsters() {
 	}
 }
 
-void Game::createInfluencedMonsters() {
-	uint32_t created = 0;
-	uint32_t influencedLimit = g_configManager().getNumber(FORGE_INFLUENCED_CREATURES_LIMIT);
-
-	while (influencedMonsters.size() < influencedLimit) {
-		if (influencedMonsters.size() >= influencedLimit) {
-			g_logger().warn("[{}] - Returning in creation of Influenced, size: {}, max is: {}.", __FUNCTION__, influencedMonsters.size(), influencedLimit);
-			break;
+void Game::createInfluencedMonsters(bool scheduleEvent /* = true */) {
+	uint32_t influencedLimit = getInfluencedLimit();
+	if (influencedMonsters.size() < influencedLimit) {
+		uint32_t toCreate = influencedLimit - static_cast<uint32_t>(influencedMonsters.size());
+		for (uint32_t i = 0; i < toCreate; ++i) {
+			if (makeInfluencedMonster() == 0) {
+				break;
+			}
 		}
+	}
 
-		if (auto ret = makeInfluencedMonster(); ret == 0) { // Condition
-			return;
-		}
-
-		created++;
+	if (scheduleEvent) {
+		scheduleInfluencedMonstersUpdate();
 	}
 }
 
@@ -11023,7 +11076,7 @@ void Game::checkForgeEventId(uint32_t monsterId) {
 
 bool Game::addInfluencedMonster(const std::shared_ptr<Monster> &monster) {
 	if (monster && monster->canBeForgeMonster()) {
-		if (auto maxInfluencedMonsters = static_cast<uint32_t>(g_configManager().getNumber(FORGE_INFLUENCED_CREATURES_LIMIT));
+		if (auto maxInfluencedMonsters = static_cast<uint32_t>(getInfluencedLimit());
 		    // If condition
 		    (influencedMonsters.size() + 1) > maxInfluencedMonsters) {
 			return false;
@@ -11035,6 +11088,49 @@ bool Game::addInfluencedMonster(const std::shared_ptr<Monster> &monster) {
 		return true;
 	}
 	return false;
+}
+
+void Game::batchRefreshInfluencedMonsters() {
+	std::vector<uint32_t> toRefresh(influencedMonsters.begin(), influencedMonsters.end());
+	for (const auto monsterId : toRefresh) {
+		const auto &monster = getMonsterByID(monsterId);
+		std::string name = monster ? monster->getName() : "";
+		updateInfluencedMonsterStatus(monsterId, name);
+	}
+
+	createInfluencedMonsters();
+}
+
+void Game::scheduleInfluencedMonstersUpdate() {
+	if (influencedMonstersEventId != 0) {
+		g_dispatcher().stopEvent(influencedMonstersEventId);
+	}
+
+	std::string saveIntervalType = g_configManager().getString(FORGE_INFLUENCED_INTERVAL_TYPE);
+	auto saveIntervalConfigTime = std::atoi(g_configManager().getString(FORGE_INFLUENCED_INTERVAL_TIME).c_str());
+	int intervalTime = 0;
+	if (saveIntervalType == "second") {
+		intervalTime = 1000;
+	} else if (saveIntervalType == "minute") {
+		intervalTime = 60 * 1000;
+	} else if (saveIntervalType == "hour") {
+		intervalTime = 60 * 60 * 1000;
+	}
+
+	uint32_t finalTime = 0;
+	if (intervalTime == 0) {
+		g_logger().warn("Influenced interval type is wrong, setting default time to 1h");
+		finalTime = 3600 * 1000;
+	} else {
+		finalTime = static_cast<uint32_t>(saveIntervalConfigTime * intervalTime);
+	}
+
+	auto schedulerTask = createPlayerTask(
+		finalTime,
+		[this] { batchRefreshInfluencedMonsters(); },
+		__FUNCTION__
+	);
+	influencedMonstersEventId = g_dispatcher().scheduleEvent(schedulerTask);
 }
 
 bool Game::addItemStoreInbox(const std::shared_ptr<Player> &player, uint32_t itemId) {
